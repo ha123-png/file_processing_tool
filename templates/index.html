@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>一站式文件脱敏工具</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-content">
+            <div class="header-left">
+                <div class="header-icon">&#9997;</div>
+                <div>
+                    <div class="header-title" id="headerTitle">一站式<span id="headerModeLabel">文件脱敏</span></div>
+                    <div class="header-subtitle" id="headerSubtitle">拖拽文件 &middot; 自动识别 &middot; 双重脱敏</div>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="mode-toggle" id="modeToggle">
+                    <button class="mode-btn active" data-mode="desensitize" id="modeDesensitize">脱敏</button>
+                    <button class="mode-btn" data-mode="extract" id="modeExtract">提取</button>
+                </div>
+                <button class="icon-btn" id="historyBtn" title="历史记录">&#128196;</button>
+                <button class="settings-btn" id="helpBtn" title="使用帮助">&#9432;</button>
+                <button class="settings-btn" id="settingsBtn" title="设置">&#9881;</button>
+                <div class="queue-badge">
+                    <span class="dot" id="statusDot"></span>
+                    <span>队列: <strong id="queueCount">0</strong></span>
+                </div>
+                <div class="status-badge idle" id="statusBadge">闲置中</div>
+                <button class="control-btn pause-btn" id="togglePauseBtn" title="暂停（中断当前任务并冻结队列）" style="display:none;">⏸</button>
+                <div class="header-timer" id="headerTimer" title="当前文件处理耗时" aria-live="polite">
+                    <span class="ht-file" id="headerTimerFile"></span>
+                    <span class="ht-time" id="headerTimerTime"></span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <nav class="main-tabs" id="mainTabs">
+        <button class="main-tab active" data-tab="workbench" id="tabWorkbench">&#9881; 工作台</button>
+        <button class="main-tab" data-tab="dashboard" id="tabDashboard">仪表盘</button>
+    </nav>
+
+    <div class="container" id="workbenchTab">
+        <div class="grid">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">文件上传</div>
+                </div>
+                <div class="card-body">
+                    <div class="drop-zone" id="dropZone">
+                        <div class="drop-zone-icon">&#128196;</div>
+                        <div class="drop-zone-text">拖拽文件到此处</div>
+                        <div class="drop-zone-hint">或点击选择文件</div>
+                        <div class="drop-zone-formats">
+                            <span class="format-tag">TXT</span>
+                            <span class="format-tag">DOCX</span>
+                            <span class="format-tag">PDF</span>
+                            <span class="format-tag">JPG</span>
+                            <span class="format-tag">PNG</span>
+                            <span class="format-tag">BMP</span>
+                            <span class="format-tag">MD</span>
+                        </div>
+                        <input type="file" class="file-input" id="fileInput" multiple>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">处理队列</div>
+                    <div id="queueBatchActions" style="display:none;gap:6px;flex-wrap:wrap;align-items:center;">
+                        <label style="font-size:11px;cursor:pointer;margin-right:4px;display:none;" id="selectAllLabel"><input type="checkbox" id="queueCheckAll" onchange="toggleAllQueueCb(this)" style="margin-right:4px;">全选</label>
+                        <button class="download-btn" onclick="batchRetry()" style="font-size:11px;padding:3px 10px;background:var(--success);display:none;" id="batchRetryBtn">批量重试</button>
+                        <button class="download-btn" onclick="batchDeleteFailed()" style="font-size:11px;padding:3px 10px;background:var(--error);display:none;" id="batchDeleteBtn">批量取消</button>
+                        <button class="download-btn" onclick="batchKillQueue()" style="font-size:11px;padding:3px 10px;background:var(--error);display:none;" id="batchKillBtn">终止选中</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="queue-tabs">
+                        <button class="queue-tab active" data-qt="processing" onclick="switchQueueTab('processing')">处理中 <span class="qt-badge" id="qtProcessingCount">0</span></button>
+                        <button class="queue-tab" data-qt="completed" onclick="switchQueueTab('completed')">已完成 <span class="qt-badge" id="qtCompletedCount">0</span></button>
+                        <button class="queue-tab" data-qt="failed" onclick="switchQueueTab('failed')">失败的 <span class="qt-badge" id="qtFailedCount">0</span></button>
+                    </div>
+                    <div class="queue-list" id="queueList"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">运行日志</div>
+                <button class="download-btn" onclick="clearLogs()" style="background:var(--gray-500);padding:4px 12px;font-size:12px;">清空日志</button>
+            </div>
+            <div class="card-body" style="padding:12px;">
+                <div class="log-panel" id="logPanel">
+                    <div class="log-entry" style="opacity:1;">
+                        <span class="log-time">--:--:--</span>
+                        <span class="log-level info">INFO</span>
+                        <span class="log-msg">系统就绪，等待文件上传...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="result-section card" id="resultSection">
+            <div class="card-header">
+                <div>
+                    <div class="card-title"><span id="resultTitle">脱敏结果</span></div>
+                    <div id="resultMeta" style="margin-top:4px;"></div>
+                </div>
+                <div id="resultActions" class="result-btn-area"></div>
+            </div>
+            <div class="card-body">
+                <div class="result-tabs" id="resultTabs">
+                    <button class="result-tab active" data-tab="original" id="tabOriginal">原文预览</button>
+                    <button class="result-tab" data-tab="desensitized" id="tabDesensitized">脱敏后预览</button>
+                    <button class="result-tab" data-tab="replacements" id="tabReplacements">替换详情</button>
+                    <button class="result-tab" data-tab="extract" style="display:none;">提取结果</button>
+                    <button class="result-tab" data-tab="merge" style="display:none;">合成表预览</button>
+                </div>
+                <div class="result-panel active" id="originalPanel">
+                    <div class="result-empty">
+                        <div class="result-empty-text">暂无结果，处理完成后将显示在此处</div>
+                    </div>
+                </div>
+                <div class="result-panel" id="desensitizedPanel">
+                    <div class="result-empty">
+                        <div class="result-empty-text">暂无结果，处理完成后将显示在此处</div>
+                    </div>
+                </div>
+                <div class="result-panel" id="replacementsPanel">
+                    <div class="result-empty">
+                        <div class="result-empty-text">暂无替换数据</div>
+                    </div>
+                </div>
+                <div id="extractWrapper" class="panel-wrapper extract-wrap">
+                    <div id="extractCompareLeft" class="extract-compare-left"></div>
+                    <div class="result-panel" id="extractPanel" style="overflow:auto;">
+                        <div class="result-empty">
+                            <div class="result-empty-text">暂无提取结果</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="mergeWrapper" class="panel-wrapper">
+                    <div class="result-panel" id="mergePanel">
+                        <div class="result-empty">
+                            <div class="result-empty-text">暂无合成数据</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="history-overlay" id="historyOverlay">
+        <div class="history-panel">
+            <div class="history-panel-header">
+                <div class="history-panel-title">&#128196; 历史记录</div>
+                <button class="history-panel-close" id="historyClose">&times;</button>
+            </div>
+            <div class="history-panel-body" id="historyList">
+                <div class="history-empty">暂无历史记录</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-overlay" id="settingsOverlay">
+        <div class="settings-panel">
+            <div class="settings-header">
+                <div class="settings-title">设置</div>
+                <button class="settings-close" id="settingsClose">&times;</button>
+            </div>
+            <div class="settings-body">
+                <div class="settings-card">
+                    <div class="settings-card-header" onclick="toggleCard(this)">
+                        <span>通用设置</span><span class="settings-card-arrow">▼</span>
+                    </div>
+                    <div class="settings-card-body">
+                <div class="settings-group">
+                    <label class="settings-label">LLM 配置方案</label>
+                    <div class="settings-desc">保存 / 应用已保存的 LLM 配置方案，点击"应用"后生效</div>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        <select class="settings-select" id="settingProfileSelect" style="flex:1;">
+                            <option value="">-- 选择方案 --</option>
+                        </select>
+                        <button type="button" class="download-btn" onclick="applyProfile()" style="background:var(--success);white-space:nowrap;font-size:12px;">▶ 应用</button>
+                        <button type="button" class="download-btn" onclick="saveProfile()" style="white-space:nowrap;font-size:12px;">保存为方案</button>
+                        <button type="button" class="download-btn" onclick="deleteProfile()" style="background:var(--error);white-space:nowrap;font-size:12px;">删除</button>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">LLM 提供商</label>
+                    <div class="settings-desc">选择大模型服务提供商，支持 OpenAI 兼容 API（LM Studio / Ollama / OpenAI 等）</div>
+                    <select class="settings-select" id="settingProvider">
+                        <option value="lm_studio">LM Studio（本地）</option>
+                        <option value="ollama">Ollama（本地）</option>
+                        <option value="openai">OpenAI（云端）</option>
+                        <option value="openai_compatible">OpenAI兼容（自定义）</option>
+                    </select>
+                </div>
+                <div id="cloudWarning" style="display:none;background:#fff0f0;border:2px solid var(--error);border-radius:8px;padding:12px 14px;margin-bottom:12px;">
+                    <div style="color:var(--error);font-weight:bold;font-size:14px;margin-bottom:6px;">云端处理警告</div>
+                    <div style="color:#666;font-size:13px;line-height:1.6;">
+                        您选择了云端大模型服务，您的文件<strong>将被上传至第三方服务器</strong>进行处理：<br>
+                        • 文件中<strong>不含</strong>高度敏感的个人隐私、商业机密或涉密信息<br>
+                        • 您了解并接受数据将离开本地环境传输至云端<br>
+                        • 建议先使用脱敏模式的 <strong>quick（仅正则匹配）</strong> 预处理后再上传
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">Base URL</label>
+                    <div class="settings-desc">LLM 服务的完整地址（含 /v1），例如 http://127.0.0.1:1234/v1</div>
+                    <input class="settings-input" id="settingBaseURL" placeholder="http://127.0.0.1:1234/v1">
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">API Key</label>
+                    <div class="settings-desc">云端模型需要填写 API Key，本地模型可留空。已保存的 Key 以脱敏方式显示</div>
+                    <input class="settings-input" id="settingLMApiKey" placeholder="留空则不启用认证" type="password">
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">模型名称</label>
+                    <div class="settings-desc">模型标识名称，例如 gpt-4o / qwen/qwen3-14b / llama3:8b</div>
+                    <input class="settings-input" id="settingModel" placeholder="例如: gpt-4o">
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">多模态支持（视觉识别）</label>
+                    <div class="settings-desc">关闭后，图片/PDF 文件将被跳过。纯文本模型请关闭此项</div>
+                    <select class="settings-select" id="settingMultimodal">
+                        <option value="true">开启（支持图片/PDF）</option>
+                        <option value="false">关闭（仅文本）</option>
+                    </select>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">Max Tokens（最大输出长度）</label>
+                    <div class="settings-desc">控制模型单次最大输出 token 数</div>
+                    <input class="settings-input" id="settingMaxTokens" placeholder="2048" type="number" min="256" max="32768" style="width:160px;">
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">Temperature（创造性）</label>
+                    <div class="settings-desc">0.1=高确定性格式化, 0.3=适中, 0.8+=高创造性</div>
+                    <input class="settings-input" id="settingTemperature" placeholder="0.3" type="number" min="0" max="2" step="0.1" style="width:160px;">
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">思考模式 (enable_thinking)</label>
+                    <div class="settings-desc">关闭可大幅提升响应速度（推荐）</div>
+                    <select class="settings-select" id="settingEnableThinking">
+                        <option value="false">关闭（推荐，速度更快）</option>
+                        <option value="true">开启（输出更精确但耗时）</option>
+                    </select>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">请求超时（秒）</label>
+                    <div class="settings-desc">大模型响应超时时间，云端模型建议 120 秒以上</div>
+                    <input class="settings-input" id="settingTimeout" placeholder="300" type="number" min="30" max="1800">
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">服务端口</label>
+                    <div class="settings-desc">修改 Web 服务端口号，修改后需重启服务生效</div>
+                    <input class="settings-input" id="settingServerPort" placeholder="5000" type="number" min="1024" max="65535" style="width:160px;">
+                </div>
+                    </div>
+                </div>
+                <div class="settings-card">
+                    <div class="settings-card-header" onclick="toggleCard(this)">
+                        <span>脱敏设置</span><span class="settings-card-arrow">▼</span>
+                    </div>
+                    <div class="settings-card-body">
+                <div class="settings-group">
+                    <label class="settings-label">脱敏占位符</label>
+                    <div class="settings-desc">敏感信息替换成的文本</div>
+                    <input class="settings-input" id="settingPlaceholder" placeholder="xxx" maxlength="10">
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">日期格式</label>
+                    <div class="settings-desc">脱敏结果中日期的显示格式，YYYY=年 MM=月 DD=日</div>
+                    <input class="settings-input" id="settingDateFormat" placeholder="YYYY年MM月DD日">
+                    <div class="settings-hint">例如：YYYY年MM月DD日、YYYY-MM-DD、YYYY/MM/DD</div>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">脱敏深度</label>
+                    <div class="settings-desc">快速：仅正则匹配（毫秒级） | 标准：正则+大模型（推荐） | 深度：正则+双重大模型补漏</div>
+                    <select class="settings-select" id="settingDepth">
+                        <option value="quick">快速模式（仅正则匹配）</option>
+                        <option value="standard">标准模式（正则 + 一次大模型）</option>
+                        <option value="deep">深度模式（正则 + 双重大模型补漏）</option>
+                    </select>
+                </div>
+
+                <div class="settings-group" style="border-top:1px solid var(--gray-200);padding-top:16px;">
+                    <label class="settings-label" style="cursor:pointer;" onclick="togglePromptFold()">提示词编辑 <span style="font-size:11px;color:var(--gray-400);" id="promptFoldIcon">▼</span></label>
+                    <div class="settings-desc">自定义脱敏提示词以增强效果。修改后重启程序将恢复为默认提示词。深度模式需要两轮提示词，快速模式不需要提示词。</div>
+                    <div id="promptFoldBody">
+                    <div style="font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:4px;">第一轮提示词（标准/深度模式）</div>
+                    <textarea class="prompt-textarea" id="settingPromptFirst" rows="6" placeholder="第一轮脱敏提示词"></textarea>
+                    <div class="prompt-footer-hint">
+                        以下 JSON 格式自动追加，不可修改：<br>
+                        {"sensitive_info": ["敏感项1", "敏感项2"]}<br>
+                        无敏感信息时输出：{"sensitive_info": []}
+                    </div>
+                    <div id="secondPassGroup">
+                    <div style="font-size:12px;font-weight:600;color:var(--gray-600);margin:8px 0 4px;">第二轮提示词（仅深度模式）</div>
+                    <textarea class="prompt-textarea" id="settingPromptSecond" rows="4" placeholder="第二轮补漏提示词"></textarea>
+                    <div class="prompt-footer-hint">
+                        以下 JSON 格式自动追加，不可修改：<br>
+                        {"sensitive_info": ["漏掉的项1", "漏掉的项2"]}<br>
+                        无遗漏时输出：{"sensitive_info": []}
+                    </div>
+                    </div>
+                    <div style="font-size:11px;color:var(--gray-400);margin-top:4px;">留空则使用默认提示词</div>
+                    </div>
+                </div>
+                    </div>
+                </div>
+                <div class="settings-card">
+                    <div class="settings-card-header" onclick="toggleCard(this)">
+                        <span>提取设置</span><span class="settings-card-arrow">▼</span>
+                    </div>
+                    <div class="settings-card-body">
+                <div class="settings-group">
+                    <label class="settings-label">提取模式设置</label>
+                    <div class="settings-desc">提取模式下使用，自动使用多模态模型处理图片/PDF</div>
+                    <div style="display:flex;gap:16px;align-items:center;margin-bottom:8px;">
+                        <label style="font-size:13px;color:var(--gray-600);display:flex;align-items:center;gap:6px;cursor:pointer;">
+                            <input type="checkbox" id="settingAutoMerge"> 全自动模式（不审查直接合并到Excel）
+                        </label>
+                    </div>
+                    <div style="display:flex;gap:16px;align-items:center;margin-bottom:8px;">
+                        <label style="font-size:13px;color:var(--gray-600);display:flex;align-items:center;gap:6px;cursor:pointer;">
+                            <input type="checkbox" id="settingDocxImageExtract"> Word文档图片提取（实验性）
+                        </label>
+                    </div>
+                    <div style="margin-bottom:8px;">
+                        <label style="font-size:12px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px;">发票自检验容差（元）</label>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <input type="range" id="settingInvoiceTolerance" min="0.01" max="1" step="0.01" value="0.02" style="flex:1;max-width:200px;" oninput="document.getElementById('invoiceToleranceVal').textContent = Number(this.value).toFixed(2) + '元'">
+                            <span id="invoiceToleranceVal" style="font-size:13px;color:var(--gray-500);min-width:50px;">0.02元</span>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
+                        <label style="font-size:13px;color:var(--gray-600);display:flex;align-items:center;gap:4px;cursor:pointer;">
+                            <input type="checkbox" id="settingInvRuleR1" checked> 数量×单价=金额
+                        </label>
+                        <label style="font-size:13px;color:var(--gray-600);display:flex;align-items:center;gap:4px;cursor:pointer;">
+                            <input type="checkbox" id="settingInvRuleR2" checked> 金额×税率=税额
+                        </label>
+                        <label style="font-size:13px;color:var(--gray-600);display:flex;align-items:center;gap:4px;cursor:pointer;">
+                            <input type="checkbox" id="settingInvRuleR3" checked> Σ(金额+税额)=价税合计
+                        </label>
+                    </div>
+                    <div id="docxImageWarning" style="display:none;padding:8px 12px;margin-bottom:8px;background:var(--error-bg);color:var(--error);border-radius:var(--radius-sm);font-size:12px;line-height:1.6;">
+                        高风险：开启后Word中的每张嵌入图片将逐一调用多模态模型识别，<strong>大幅增加处理时间和模型负载</strong>。图片与文字的上下文关系可能丢失。仅当Word文档包含发票/合同扫描图等必须提取的信息时才建议开启。
+                    </div>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-card" style="margin-top:8px;">
+                <div class="settings-card-header" onclick="toggleCard(this)">
+                    <span>模板管理</span><span class="settings-card-arrow">▼</span>
+                    </div>
+                    <div class="settings-card-body">
+                <div class="settings-group">
+                    <label class="settings-label">提取字段模板</label>
+                    <div class="settings-desc">选择预设模板或自定义字段，提取模式下使用</div>
+                    <div id="activeTemplateHint" style="font-size:12px;color:var(--primary);font-weight:600;margin-bottom:6px;padding:6px 10px;background:var(--primary-bg);border-radius:4px;display:none;"></div>
+                    <select class="settings-select" id="settingTemplateSelect"></select>
+                    <div style="display:flex;gap:8px;margin-top:8px;">
+                        <input class="settings-input" id="settingTemplateName" placeholder="模板名称" style="flex:1;">
+                        <button class="settings-btn-cancel" id="templateAddBtn" style="flex-shrink:0;">新增</button>
+                        <button class="settings-btn-cancel" id="templateDelBtn" style="flex-shrink:0;color:var(--error);">删除</button>
+                    </div>
+                    <div style="margin-top:6px;">
+                        <button class="settings-btn-primary" id="templateApplyBtn" style="width:100%;background:#059669;border-color:#059669;">保存并应用此模板</button>
+                    </div>
+                    <div id="templateFieldsContainer" style="margin-top:8px;max-height:300px;overflow-y:auto;"></div>
+                </div>
+                    </div>
+                </div>
+                <div class="settings-actions">
+                    <button class="settings-btn-danger" id="cleanUploadsBtn" style="margin-right:auto;">清理上传缓存</button>
+                    <button class="settings-btn-cancel" id="settingsCancel">取消</button>
+                    <button class="settings-btn-primary" id="settingsSave">保存设置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="settings-toast" id="settingsToast"></div>
+
+    <div class="container" id="dashboardTab" style="display:none;">
+        <div class="dash-filter-bar">
+            <label class="dash-filter-label">统计范围</label>
+            <select class="dash-filter-select" id="dashFilterSelect">
+                <option value="auto">默认跟随</option>
+                <option value="desensitize">脱敏统计</option>
+                <option value="extract">提取统计</option>
+                <option value="all">全部统计</option>
+            </select>
+        </div>
+        <div class="dash-kpi-row" id="dashKpiRow">
+            <div class="dash-kpi-card">
+                <div class="dash-kpi-icon">&#128196;</div>
+                <div class="dash-kpi-body">
+                    <div class="dash-kpi-value" id="dashTotalFiles" data-target="0">0</div>
+                    <div class="dash-kpi-label" title="统计所有已处理完成的累计数据">累计处理文件</div>
+                </div>
+            </div>
+            <div class="dash-kpi-card">
+                <div class="dash-kpi-icon">&#9201;</div>
+                <div class="dash-kpi-body">
+                    <div class="dash-kpi-value" id="dashAvgDuration" data-target="0">0<span class="dash-kpi-unit">s</span></div>
+                    <div class="dash-kpi-label">平均耗时</div>
+                </div>
+            </div>
+            <div class="dash-kpi-card">
+                <div class="dash-kpi-icon">&#128206;</div>
+                <div class="dash-kpi-body">
+                    <div id="dashKpiSingle">
+                        <div class="dash-kpi-value" id="dashSingleValue">0</div>
+                        <div class="dash-kpi-label" id="dashSingleLabel">累计替换项</div>
+                    </div>
+                    <div class="dash-kpi-dual kpi-hidden" id="dashKpiDual">
+                        <div class="dash-kpi-dual-row" id="dashRepRow">
+                            <span class="dash-kpi-value dash-kpi-value--sm" id="dashTotalRep">0</span>
+                            <span class="dash-kpi-sub">累计替换项</span>
+                        </div>
+                        <div class="dash-kpi-dual-row" id="dashItemsRow">
+                            <span class="dash-kpi-value dash-kpi-value--sm" id="dashTotalItems">0</span>
+                            <span class="dash-kpi-sub">累计明细条</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="dash-kpi-card">
+                <div class="dash-kpi-icon">&#9888;</div>
+                <div class="dash-kpi-body">
+                    <div class="dash-kpi-value" id="dashErrorRate" data-target="0">0<span class="dash-kpi-unit">%</span></div>
+                    <div class="dash-kpi-label">报错率</div>
+                </div>
+            </div>
+        </div>
+        <div class="dash-charts-row">
+            <div class="dash-card dash-card--chart">
+                <div class="dash-card-header">
+                    <span class="dash-card-title">每日处理趋势（30日）</span>
+                    <span class="dash-card-hint">累计 <strong id="dashTrendTotal">0</strong> 文件</span>
+                </div>
+                <div class="dash-card-body">
+                    <div class="dash-chart-wrap">
+                        <svg viewBox="0 0 600 180" class="dash-svg" id="dashSvgTrend" preserveAspectRatio="none">
+                            <polyline id="dashTrendLine" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            <g id="dashTrendDots"></g>
+                        </svg>
+                        <div class="dash-chart-xaxis" id="dashXAxis"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="dash-card dash-card--today">
+                <div class="dash-card-header">
+                    <span class="dash-card-title">今日概览</span>
+                </div>
+                <div class="dash-card-body">
+                    <div class="dash-today-list" id="dashTodayGrid">
+                        <div class="dash-today-item">
+                            <span class="dash-today-val" id="dashTodayFiles">-</span>
+                            <span class="dash-today-lbl">处理文件</span>
+                        </div>
+                        <div class="dash-today-item" id="dashTodayRepItem">
+                            <span class="dash-today-val" id="dashTodayRep">-</span>
+                            <span class="dash-today-lbl" id="dashTodayRepLbl">替换项</span>
+                        </div>
+                        <div class="dash-today-item extra-row collapsed" id="dashTodayItemsItem">
+                            <span class="dash-today-val" id="dashTodayItems">-</span>
+                            <span class="dash-today-lbl">明细条</span>
+                        </div>
+                        <div class="dash-today-item">
+                            <span class="dash-today-val" id="dashTodayAvg">-<small>s</small></span>
+                            <span class="dash-today-lbl">平均耗时</span>
+                        </div>
+                        <div class="dash-today-item">
+                            <span class="dash-today-val" id="dashTodayErrors">-</span>
+                            <span class="dash-today-lbl">报错</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="dash-clear-bar">
+            <button class="dash-clear-btn" id="dashClearBtn">清除统计数据</button>
+        </div>
+    </div>
+
+    <div id="zoomOverlay" class="zoom-overlay" style="display:none;">
+        <div class="zoom-inner">
+            <button type="button" class="zoom-close" id="zoomClose" aria-label="关闭">&times;</button>
+            <div class="zoom-scroll">
+                <img id="zoomImage" alt="预览" />
+            </div>
+            <div class="zoom-toolbar">
+                <button type="button" id="zoomOutBtn" aria-label="缩小">-</button>
+                <span id="zoomLevelLabel">100%</span>
+                <button type="button" id="zoomInBtn" aria-label="放大">+</button>
+                <button type="button" id="zoomResetBtn">重置</button>
+            </div>
+        </div>
+    </div>
+    <input type="file" id="importExcelInput" accept=".xlsx,.csv" style="display:none;">
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/extract.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    <script>
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const queueList = document.getElementById('queueList');
+        const logPanel = document.getElementById('logPanel');
+        const queueCount = document.getElementById('queueCount');
+        const statusDot = document.getElementById('statusDot');
+        const statusBadge = document.getElementById('statusBadge');
+        const originalPanel = document.getElementById('originalPanel');
+        const desensitizedPanel = document.getElementById('desensitizedPanel');
+        const replacementsPanel = document.getElementById('replacementsPanel');
+        const extractPanel = document.getElementById('extractPanel');
+        const mergePanel = document.getElementById('mergePanel');
+        const resultMeta = document.getElementById('resultMeta');
+        const resultActions = document.getElementById('resultActions');
+        const resultTitle = document.getElementById('resultTitle');
+        const headerModeLabel = document.getElementById('headerModeLabel');
+        const headerSubtitle = document.getElementById('headerSubtitle');
+        const modeDesensitize = document.getElementById('modeDesensitize');
+        const modeExtract = document.getElementById('modeExtract');
+        const tabOriginal = document.getElementById('tabOriginal');
+        const tabDesensitized = document.getElementById('tabDesensitized');
+        const tabReplacements = document.getElementById('tabReplacements');
+        const mergeTab = document.querySelector('.result-tab[data-tab="merge"]');
+        const headerTimer = document.getElementById('headerTimer');
+        const headerTimerFile = document.getElementById('headerTimerFile');
+        const headerTimerTime = document.getElementById('headerTimerTime');
+        const togglePauseBtn = document.getElementById('togglePauseBtn');
+
+        let resultsHistory = [];
+        let extractionHistory = [];
+        let currentResult = null;
+        let _resultByMode = { desensitize: null, extract: null };
+        let _extractOriginalContent = '';
+        let _desensitizeOriginalContent = '';
+        let _extractResultContent = '';
+        let _desensitizePanels = {};
+        let _currentDesensitizeData = null;
+        let eventSource = null;
+        let logCount = 0;
+        let currentMode = 'desensitize';
+        let processingTimer = null;
+        let processingSeconds = 0;
+        let processingFileName = '';
+        var _processingLocked = false;
+        var _queueSize = 0;
+        var _currentTaskId = '';
+        var _mergeModified = false;
+        var _mergeAutoSaveTimer = null;
+
+        var _queueItems = {};
+        var _queueTab = 'processing';
+        var _inDashboard = false;
+
+        var _pendingUpdates = {};
+        var _batchOperationLock = false;
+
+        var _largeTask = {
+            groupId: null,
+            queueId: null,
+            intervalId: null,
+            totalChunks: 0,
+            displayVersion: 0,
+            reset: function() {
+                if (this.intervalId) { clearInterval(this.intervalId); this.intervalId = null; }
+                this.groupId = null;
+                this.queueId = null;
+                this.totalChunks = 0;
+                this.displayVersion = 0;
+            },
+            isActive: function() { return !!this.groupId; }
+        };
+
+        var _filterState = {};
+
+        var _defaultEmptyPanels = {};
+
+        saveDefaultPanels();
+
+        togglePauseBtn.addEventListener('click', function() {
+            var isPaused = document.body.classList.contains('queue-paused');
+            if (isPaused) {
+                if (_batchOperationLock) { showToast('正在执行批量操作，请稍候', false, true); return; }
+                document.body.classList.remove('queue-paused');
+                togglePauseBtn.className = 'control-btn pause-btn';
+                togglePauseBtn.textContent = '⏸';
+                fetch('/api/queue/resume', {method:'POST'}).then(function(r){return r.json();}).then(function(d){
+                    addLog('info', '队列已恢复');
+                    processingSeconds = 0;
+                    var curFile = processingFileName;
+                    if (curFile) startProcessingTimer(curFile);
+                    if (_largeTask.groupId && !_largeTask.intervalId) startLargeTaskPolling();
+                }).catch(function(e){
+                    document.body.classList.add('queue-paused');
+                    togglePauseBtn.className = 'control-btn resume-btn';
+                    togglePauseBtn.textContent = '▶';
+                    addLog('error', '恢复失败: ' + e.message);
+                });
+            } else {
+                document.body.classList.add('queue-paused');
+                togglePauseBtn.className = 'control-btn resume-btn';
+                togglePauseBtn.textContent = '▶';
+                stopProcessingTimer();
+                fetch('/api/queue/pause', {method:'POST'}).then(function(r){return r.json();}).then(function(d){
+                    processingSeconds = 0;
+                    updateHeaderTimerDisplay();
+                    addLog('warning', '队列已暂停，当前任务已中断');
+                }).catch(function(e){
+                    document.body.classList.remove('queue-paused');
+                    togglePauseBtn.className = 'control-btn pause-btn';
+                    togglePauseBtn.textContent = '⏸';
+                    addLog('error', '暂停失败: ' + e.message);
+                });
+            }
+        });
+
+        modeDesensitize.addEventListener('click', function(){
+            setMode('desensitize');
+        });
+        modeExtract.addEventListener('click', function(){
+            setMode('extract');
+        });
+
+        fetch('/api/clear_excel', {method:'POST'}).then(function(){
+            _resetMergeState();
+            fetch('/api/mode').then(function(r){return r.json();}).then(function(d){setMode(d.mode);});
+        });
+
+        var _savedResultActions = '';
+        var _modePanelCache = {};
+
+
+
+        var zoomLevel = 1;
+
+        var _mergePage = 1;
+        var _mergeTotalPages = 1;
+        var _mergeTotalRows = 0;
+        var PAGE_SIZE = 5;
+
+        document.querySelectorAll('.result-tab').forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                if (this.style.display === 'none') return;
+                switchTab(this.getAttribute('data-tab'));
+            });
+        });
+
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+        });
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+            for (var i = 0; i < e.dataTransfer.files.length; i++) {
+                uploadFile(e.dataTransfer.files[i]);
+            }
+        });
+        dropZone.addEventListener('click', function() {
+            fileInput.click();
+        });
+        fileInput.addEventListener('change', function() {
+            for (var i = 0; i < this.files.length; i++) {
+                uploadFile(this.files[i]);
+            }
+            this.value = '';
+        });
+
+        var settingsOverlay = document.getElementById('settingsOverlay');
+        var settingsBtn = document.getElementById('settingsBtn');
+        var settingsClose = document.getElementById('settingsClose');
+        var settingsCancel = document.getElementById('settingsCancel');
+        var settingsSave = document.getElementById('settingsSave');
+        var settingsToast = document.getElementById('settingsToast');
+        var toastTimer = null;
+
+        document.getElementById('templateAddBtn').addEventListener('click', function(){
+            var templates = window._templates || [];
+            var baseName = '新模板';
+            var maxN = 0;
+            templates.forEach(function(t){
+                if (t && t.name && t.name.indexOf(baseName) === 0) {
+                    var n = parseInt(t.name.substring(baseName.length));
+                    if (!isNaN(n) && n > maxN) maxN = n;
+                }
+            });
+            var name = baseName + (maxN + 1);
+            templates.push({name: name, description: '', fields: [{label:'新字段', section:'item'}]});
+            window._templates = templates;
+            var sel = document.getElementById('settingTemplateSelect');
+            var opt = document.createElement('option');
+            opt.value = templates.length - 1;
+            opt.textContent = name;
+            sel.appendChild(opt);
+            sel.selectedIndex = templates.length - 1;
+            renderTemplateFields(templates, templates.length - 1);
+            showToast('已新增模板: ' + name);
+        });
+
+        document.getElementById('templateDelBtn').addEventListener('click', function(){
+            var templates = window._templates || [];
+            var sel = document.getElementById('settingTemplateSelect');
+            var idx = parseInt(sel.value);
+            var tpl = templates[idx];
+            if (tpl && tpl.is_system) { showToast('系统模板不可删除，请先复制后使用', true); return; }
+            if (templates.length <= 1) { showToast('至少保留一个模板', true); return; }
+            templates.splice(idx, 1);
+            sel.remove(idx);
+            sel.value = 0;
+            renderTemplateFields(templates, 0);
+            window._templates = templates;
+            showToast('模板已删除');
+        });
+
+        document.getElementById('templateApplyBtn').addEventListener('click', function(){
+            var templates = window._templates || [];
+            var sel = document.getElementById('settingTemplateSelect');
+            var idx = parseInt(sel.value);
+            if (isNaN(idx) || !templates[idx]) return;
+            var curName = (templates[idx].name || '').trim();
+            if (!curName) { showToast('模板名称不能为空', true); return; }
+            for (var i = 0; i < templates.length; i++) {
+                if (i !== idx && templates[i] && templates[i].name === curName) {
+                    showToast('模板名称重复："' + curName + '"，请修改后再保存', true);
+                    return;
+                }
+            }
+            window._activeTemplateIndex = idx;
+            updateActiveTemplateHint(idx);
+            for (var i = 0; i < sel.options.length; i++) {
+                var t = templates[i];
+                sel.options[i].textContent = (i === idx ? '[激活] ' : '') + (t ? t.name : '未命名');
+            }
+            var body = {templates: templates, config: {extraction: {active_template_index: idx}}};
+            fetch('/api/save_settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+            .then(function(r){return r.json();})
+            .then(function(d){
+                if (d.error) { showToast('保存失败: ' + d.error, true); return; }
+                showToast('已保存并应用模板: ' + templates[idx].name);
+                var hint = document.getElementById('activeTemplateHint');
+                if (hint) { hint.style.background = 'var(--primary-bg)'; hint.style.color = 'var(--primary)'; }
+            }).catch(function(e){ showToast('保存失败', true); });
+        });
+
+        var _settingsDirty = false;
+
+        settingsBtn.addEventListener('click', function() {
+            if (_processingLocked) {
+                showToast('处理进行中，请等待完成后修改设置', true);
+                return;
+            }
+            _settingsDirty = false;
+            loadSettings(); settingsOverlay.classList.add('active');
+        });
+        settingsClose.addEventListener('click', function() { tryCloseSettings(); });
+        settingsCancel.addEventListener('click', function() { tryCloseSettings(); });
+        settingsSave.addEventListener('click', saveSettings);
+
+        document.getElementById('cleanUploadsBtn').addEventListener('click', function() {
+            if (!confirm('删除所有上传缓存文件（保留最近20个）？')) return;
+            this.disabled = true;
+            fetch('/api/cleanup_uploads', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({keep:20})})
+            .then(function(r){return r.json();}).then(function(d){ showToast(d.message); })
+            .catch(function(e){ showToast('清理失败: '+e.message, true); })
+            .finally(function(b){ document.getElementById('cleanUploadsBtn').disabled = false; });
+        });
+
+        document.getElementById('settingDepth').addEventListener('change', updatePromptVisibility);
+
+        document.getElementById('settingDocxImageExtract').addEventListener('change', function(){
+            document.getElementById('docxImageWarning').style.display = this.checked ? '' : 'none';
+        });
+
+        settingsOverlay.querySelectorAll('input, select, textarea').forEach(function(el){
+            el.addEventListener('change', function(){ markDirty(); });
+            el.addEventListener('input', function(){ markDirty(); });
+        });
+
+        var historyOverlay = document.getElementById('historyOverlay');
+        var historyBtn = document.getElementById('historyBtn');
+        var historyClose = document.getElementById('historyClose');
+        var historyList = document.getElementById('historyList');
+
+        historyBtn.addEventListener('click', function() { renderHistory(); historyOverlay.classList.add('active'); });
+        historyClose.addEventListener('click', function() { historyOverlay.classList.remove('active'); });
+        historyOverlay.addEventListener('click', function(e) { if (e.target === this) historyOverlay.classList.remove('active'); });
+
+        document.getElementById('helpBtn').addEventListener('click', function() {
+            var html = '<div style="line-height:1.8;font-size:14px;color:var(--gray-700);padding:4px 0;">' +
+                '<h3 style="margin:0 0 12px;font-size:18px;">文件处理工具 - 使用说明</h3>' +
+                '<hr style="border:none;border-top:1px solid var(--gray-200);margin:12px 0;">' +
+                '<h4 style="margin:12px 0 6px;">工作模式</h4>' +
+                '<p><strong>脱敏模式</strong>：上传文件后自动识别敏感信息（人名、金额、电话、地址、日期、合同编号等），替换为占位符。支持三层深度：快速（仅正则）、标准（正则+大模型）、深度（正则+双轮大模型补漏）。</p>' +
+                '<p><strong>提取模式</strong>：从发票、送货单等文件中提取结构化数据。支持两种预设模板：发票信息提取和送货单信息提取，可自定义模板字段。</p>' +
+                '<p>点击顶部「脱敏」/「提取」按钮切换模式。处理过程中禁止切换，需等待当前任务完成。</p>' +
+                '<hr style="border:none;border-top:1px solid var(--gray-200);margin:12px 0;">' +
+                '<h4 style="margin:12px 0 6px;">支持的文件格式</h4>' +
+                '<p><strong>文本</strong>：TXT、MD、CSV、JSON、XML、YAML、LOG、INI、CFG、PY、JS、TS、HTML、CSS</p>' +
+                '<p><strong>文档</strong>：DOCX（Word）、PDF</p>' +
+                '<p><strong>图片</strong>：JPG、PNG、BMP、TIFF、WEBP、GIF</p>' +
+                '<p>PDF和图片通过多模态大模型自动识别文字内容。单文件限制 20MB。大文件（PDF>=5页，文本>=5000字）自动拆分为子任务处理。</p>' +
+                '<hr style="border:none;border-top:1px solid var(--gray-200);margin:12px 0;">' +
+                '<h4 style="margin:12px 0 6px;">脱敏设置</h4>' +
+                '<p><strong>三层深度</strong>：快速模式仅正则匹配（毫秒级），标准模式添加一次LLM识别（推荐），深度模式再加二次补漏审查。</p>' +
+                '<p><strong>占位符</strong>：敏感信息替换成的文本，默认为 xxx。</p>' +
+                '<p><strong>日期格式</strong>：输出文件中所有日期统一格式，如 YYYY年MM月DD日 或 YYYY-MM-DD。</p>' +
+                '<p><strong>提示词编辑</strong>：可自定义脱敏提示词以增强效果，修改仅当前会话有效，重启恢复默认。</p>' +
+                '<hr style="border:none;border-top:1px solid var(--gray-200);margin:12px 0;">' +
+                '<h4 style="margin:12px 0 6px;">LLM 配置</h4>' +
+                '<p>支持 LM Studio、Ollama、OpenAI 及任何 OpenAI 兼容 API。配置方案可保存/切换，方便不同场景快速切换模型。</p>' +
+                '<p><strong>多模态开关</strong>：关闭后图片/PDF将被跳过，纯文本模型请关闭此项。</p>' +
+                '<p><strong>思考模式</strong>：关闭可大幅提升响应速度（推荐）。</p>' +
+                '<p>选择云端提供商时会弹出安全警告，确认后方可使用。</p>' +
+                '<hr style="border:none;border-top:1px solid var(--gray-200);margin:12px 0;">' +
+                '<h4 style="margin:12px 0 6px;">队列操作</h4>' +
+                '<p>上传文件后自动加入处理队列。支持暂停/恢复/终止。队列上限 100 个任务。</p>' +
+                '<p>暂停时，正在处理的任务回到队列末尾等待恢复。</p>' +
+                '<p>处理失败的文件可点击重试重新加入队列。</p>' +
+                '<hr style="border:none;border-top:1px solid var(--gray-200);margin:12px 0;">' +
+                '<h4 style="margin:12px 0 6px;">提取与合成表</h4>' +
+                '<p>提取模式下可选择模板，上传文件后自动提取结构化字段。</p>' +
+                '<p>开启「全自动模式」后提取结果直接合并到 Excel，无需手动操作。</p>' +
+                '<p>合成表支持：多工作表管理、单元格编辑、新增/删除行、导入 Excel/CSV、字段筛选导出。</p>' +
+                '<p>导入支持 .xlsx 和 .csv。新建表保留全部字段，追加到现有表自动匹配列头取并集。</p>' +
+                '<p>发票模板提取后自动触发校验：数量*单价=金额、金额*税率=税额、汇总校验。</p>' +
+                '<hr style="border:none;border-top:1px solid var(--gray-200);margin:12px 0;">' +
+                '<h4 style="margin:12px 0 6px;">仪表盘</h4>' +
+                '<p>顶部导航栏切换至仪表盘查看处理统计数据。脱敏和提取两种模式的统计数据独立展示。</p>' +
+                '<p>包含累计处理文件、平均耗时、累计替换项/明细条、报错率、30日处理趋势、今日概览等指标。</p>' +
+                '<hr style="border:none;border-top:1px solid var(--gray-200);margin:12px 0;">' +
+                '<h4 style="margin:12px 0 6px;">历史记录</h4>' +
+                '<p>点击标题栏的「历史记录」按钮查看处理历史，可快速回溯之前的结果。每次关闭服务后历史清空。</p>' +
+                '<p>脱敏和提取模式的历史记录独立管理，切换模式不影响对方的历史。</p>' +
+                '<p>提取模式下支持对照查看：上传图片/PDF后可在左侧查看原文件，右侧比对提取结果。</p>' +
+                '</div>';
+            showModal(html, '使用帮助');
+        });
+
+        var _urlSheetParam = null;
+        (function() {
+            var p = new URLSearchParams(window.location.search).get('sheet');
+            if (p) _urlSheetParam = decodeURIComponent(p);
+        })();
+
+        initImageZoomAndCompare();
+        connectSSE();
+
+        window.addEventListener('beforeunload', function() {
+            if (_queueSize > 0 || _processingLocked) {
+                navigator.sendBeacon('/api/queue/pause', '{}');
+            }
+        });
+
+        // ======== 仪表盘 ========
+
+        document.querySelectorAll('.main-tab').forEach(function(btn) {
+            btn.onclick = function() { switchMainTab(btn.dataset.tab); };
+        });
+
+        document.getElementById('dashClearBtn').onclick = function() {
+            if (!confirm('确定要清除所有统计数据吗？此操作不可撤销。')) return;
+            fetch('/api/stats/clear', {method: 'POST'})
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.message) { showToast(d.message); }
+                    fetchDashboard();
+                })
+                .catch(function() { showToast('清除失败', true); });
+        };
+
+        document.getElementById('dashFilterSelect').onchange = function() {
+            fetchDashboard();
+        };
+
+        var _dashFetching = false;
+
+    </script>
+
+</body>
+</html>

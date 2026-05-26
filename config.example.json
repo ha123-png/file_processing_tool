@@ -1,0 +1,172 @@
+{
+  "mode": "desensitize",
+  "extraction": {
+    "auto_merge": true,
+    "multimodal": true,
+    "templates": [
+      {
+        "name": "发票信息提取",
+        "description": "标准增值税发票结构化提取",
+        "is_system": true,
+        "fields": [
+          {
+            "label": "购买方名称",
+            "section": "header"
+          },
+          {
+            "label": "购买方统一社会信用代码/纳税人识别号",
+            "section": "header"
+          },
+          {
+            "label": "销售方名称",
+            "section": "header"
+          },
+          {
+            "label": "销售方统一社会信用代码/纳税人识别号",
+            "section": "header"
+          },
+          {
+            "label": "发票号码",
+            "section": "header"
+          },
+          {
+            "label": "开票日期",
+            "section": "header"
+          },
+          {
+            "label": "价税合计",
+            "section": "header"
+          },
+          {
+            "label": "项目名称",
+            "section": "item"
+          },
+          {
+            "label": "规格型号",
+            "section": "item"
+          },
+          {
+            "label": "单位",
+            "section": "item"
+          },
+          {
+            "label": "数量",
+            "section": "item"
+          },
+          {
+            "label": "单价",
+            "section": "item"
+          },
+          {
+            "label": "金额",
+            "section": "item"
+          },
+          {
+            "label": "税率/征收率",
+            "section": "item"
+          },
+          {
+            "label": "税额",
+            "section": "item"
+          },
+          {
+            "label": "备注",
+            "section": "item"
+          }
+        ]
+      },
+      {
+        "name": "送货单信息提取",
+        "description": "送货单/发货单结构化提取",
+        "is_system": true,
+        "fields": [
+          {
+            "label": "供货单位名称",
+            "section": "header"
+          },
+          {
+            "label": "供方联系电话",
+            "section": "header"
+          },
+          {
+            "label": "收货单位名称",
+            "section": "header"
+          },
+          {
+            "label": "收货地址",
+            "section": "header"
+          },
+          {
+            "label": "需方联系电话",
+            "section": "header"
+          },
+          {
+            "label": "送货单号",
+            "section": "header"
+          },
+          {
+            "label": "送货日期",
+            "section": "header"
+          },
+          {
+            "label": "货物名称",
+            "section": "item"
+          },
+          {
+            "label": "规格",
+            "section": "item"
+          },
+          {
+            "label": "单位",
+            "section": "item"
+          },
+          {
+            "label": "数量",
+            "section": "item"
+          },
+          {
+            "label": "单价",
+            "section": "item"
+          },
+          {
+            "label": "金额",
+            "section": "item"
+          },
+          {
+            "label": "备注",
+            "section": "item"
+          }
+        ]
+      }
+    ],
+    "export_path": ""
+  },
+  "llm": {
+    "provider": "lm_studio",
+    "base_url": "http://127.0.0.1:1234/v1",
+    "api_key": "",
+    "model": "qwen/qwen3-v1-8b",
+    "temperature": 0.3,
+    "max_tokens": 2048,
+    "timeout": 300,
+    "multimodal": true,
+    "reasoning_effort": null,
+    "enable_thinking": false
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 5000,
+    "debug": false
+  },
+  "desensitization": {
+    "depth": "standard",
+    "placeholder": "xxx",
+    "date_format": "YYYY年MM月DD日",
+    "queue_poll_interval": 1,
+    "output_dir": "output"
+  },
+  "prompt": {
+    "first_pass": "你是法务脱敏专家，请完整识别文件内所有敏感信息，重点关注数字。包括但不限于：\n- 金额、价格、数字\n- 公司名、企业名、机构名、品牌名、产品名\n- 真实人名、职位名、称谓\n- 地名、详细地址、身份证号、手机号、座机号、邮箱、联系方式\n- 年月日、具体日期、时间\n- 各类数字编号、文件名、合同编号、证件编号\n- 任何被《》、「」、「」、【】、（）、[] 等符号包裹的内容\n- 疑似、模糊、间接关联的敏感信息",
+    "second_pass": "你是法务脱敏专家，对已脱敏文本二次审查补漏，重点关注数字。\n找出第一轮漏掉的敏感信息，特别关注：\n- 容易被忽略的数字、金额、日期\n- 看起来像真实姓名、公司名、地名的内容\n- 任何被符号包裹的内容"
+  }
+}

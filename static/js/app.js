@@ -278,7 +278,7 @@ function updateStatus(data) {
         statusBadge.textContent = '处理中';
         togglePauseBtn.style.display = '';
         togglePauseBtn.className = 'control-btn pause-btn';
-        togglePauseBtn.textContent = '';
+        togglePauseBtn.textContent = '\u275A\u275A';
         togglePauseBtn.title = '暂停（中断当前任务并冻结队列）';
         var hasProcessing = false;
         for (var k in _queueItems) {

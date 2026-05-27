@@ -896,15 +896,6 @@ body.mode-extract:not(.tab-merge-active) #mergeWrapper {
     background: var(--warning-bg);
     color: var(--warning);
 }
-.pause-btn::before {
-    content: '';
-    display: inline-block;
-    border-left: 2px solid currentColor;
-    border-right: 2px solid currentColor;
-    width: 2px;
-    height: 1em;
-    vertical-align: text-bottom;
-}
 .pause-btn:hover {
     background: var(--warning);
     color: white;

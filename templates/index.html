@@ -597,7 +597,7 @@
                 if (_batchOperationLock) { showToast('正在执行批量操作，请稍候', false, true); return; }
                 document.body.classList.remove('queue-paused');
                 togglePauseBtn.className = 'control-btn pause-btn';
-                togglePauseBtn.textContent = '';
+                togglePauseBtn.textContent = '\u275A\u275A';
                 fetch('/api/queue/resume', {method:'POST'}).then(function(r){return r.json();}).then(function(d){
                     addLog('info', '队列已恢复');
                     processingSeconds = 0;
@@ -622,7 +622,7 @@
                 }).catch(function(e){
                     document.body.classList.remove('queue-paused');
                     togglePauseBtn.className = 'control-btn pause-btn';
-                    togglePauseBtn.textContent = '';
+                    togglePauseBtn.textContent = '\u275A\u275A';
                     addLog('error', '暂停失败: ' + e.message);
                 });
             }

@@ -597,7 +597,7 @@
                 if (_batchOperationLock) { showToast('正在执行批量操作，请稍候', false, true); return; }
                 document.body.classList.remove('queue-paused');
                 togglePauseBtn.className = 'control-btn pause-btn';
-                togglePauseBtn.textContent = '';
+                togglePauseBtn.textContent = '⏸︎';
                 fetch('/api/queue/resume', {method:'POST'}).then(function(r){return r.json();}).then(function(d){
                     addLog('info', '队列已恢复');
                     processingSeconds = 0;
@@ -607,13 +607,13 @@
                 }).catch(function(e){
                     document.body.classList.add('queue-paused');
                     togglePauseBtn.className = 'control-btn resume-btn';
-                    togglePauseBtn.textContent = '';
+                    togglePauseBtn.textContent = '▶';
                     addLog('error', '恢复失败: ' + e.message);
                 });
             } else {
                 document.body.classList.add('queue-paused');
                 togglePauseBtn.className = 'control-btn resume-btn';
-                togglePauseBtn.textContent = '';
+                togglePauseBtn.textContent = '▶';
                 stopProcessingTimer();
                 fetch('/api/queue/pause', {method:'POST'}).then(function(r){return r.json();}).then(function(d){
                     processingSeconds = 0;
@@ -622,7 +622,7 @@
                 }).catch(function(e){
                     document.body.classList.remove('queue-paused');
                     togglePauseBtn.className = 'control-btn pause-btn';
-                    togglePauseBtn.textContent = '';
+                    togglePauseBtn.textContent = '⏸︎';
                     addLog('error', '暂停失败: ' + e.message);
                 });
             }

@@ -267,7 +267,7 @@ function updateStatus(data) {
     if (paused) {
         togglePauseBtn.style.display = '';
         togglePauseBtn.className = 'control-btn resume-btn';
-        togglePauseBtn.textContent = '▶';
+        togglePauseBtn.textContent = '';
         togglePauseBtn.title = '继续（恢复队列运行）';
         statusDot.className = 'dot paused';
         statusBadge.className = 'status-badge paused';
@@ -278,7 +278,7 @@ function updateStatus(data) {
         statusBadge.textContent = '处理中';
         togglePauseBtn.style.display = '';
         togglePauseBtn.className = 'control-btn pause-btn';
-        togglePauseBtn.textContent = '⏸';
+        togglePauseBtn.textContent = '';
         togglePauseBtn.title = '暂停（中断当前任务并冻结队列）';
         var hasProcessing = false;
         for (var k in _queueItems) {
@@ -987,7 +987,7 @@ function displayExtractionResult(data) {
     var validation = data.invoice_validation || null;
     var isInvoice = false;
     for (var ci = 0; ci < fieldKeys.length; ci++) {
-        if (fieldKeys[ci] === 'tax_rate' || fieldKeys[ci] === 'tax') { isInvoice = true; break; }
+        if (fieldKeys[ci] === '税率/征收率' || fieldKeys[ci] === '税额') { isInvoice = true; break; }
     }
     var errorCellMap = {};
     var headerErrors = {};

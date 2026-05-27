@@ -896,7 +896,16 @@ body.mode-extract:not(.tab-merge-active) #mergeWrapper {
     background: var(--warning-bg);
     color: var(--warning);
 }
-
+.pause-btn::before {
+    content: '';
+    display: inline-block;
+    width: 3px; height: 14px;
+    background: currentColor;
+    border-radius: 1px;
+    box-shadow: 6px 0 0 currentColor;
+    vertical-align: middle;
+    margin-top: -1px;
+}
 .pause-btn:hover {
     background: var(--warning);
     color: white;
@@ -906,7 +915,12 @@ body.mode-extract:not(.tab-merge-active) #mergeWrapper {
     background: var(--success-bg);
     color: var(--success);
 }
-
+.resume-btn::before {
+    content: '▶';
+    font-size: 10px;
+    vertical-align: middle;
+    margin-right: 1px;
+}
 .resume-btn:hover {
     background: var(--success);
     color: white;

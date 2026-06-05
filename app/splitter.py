@@ -1,4 +1,5 @@
 import os
+from app.shared import IMAGE_FORMATS, DOCX_FORMATS, TEXT_FORMATS
 
 def split_pdf(filepath, original_name, upload_dir, task_id):
     try:
@@ -70,6 +71,8 @@ def split_text(filepath, original_name, upload_dir, task_id, chunk_size=2000):
 
 def should_split(filepath, original_name):
     ext = os.path.splitext(original_name)[1].lower()
+    if ext in IMAGE_FORMATS or ext in DOCX_FORMATS:
+        return False
     if ext == '.pdf':
         try:
             import fitz
@@ -79,6 +82,8 @@ def should_split(filepath, original_name):
             return pages >= 5
         except Exception:
             return False
+    if ext not in TEXT_FORMATS:
+        return False
     try:
         with open(filepath, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()

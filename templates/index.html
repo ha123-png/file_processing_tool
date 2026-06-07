@@ -722,12 +722,29 @@
             var tpl = templates[idx];
             if (tpl && tpl.is_system) { showToast('系统模板不可删除，请先复制后使用', true); return; }
             if (templates.length <= 1) { showToast('至少保留一个模板', true); return; }
+            // 调整激活模板索引
+            var activeIdx = window._activeTemplateIndex;
+            if (typeof activeIdx === 'number') {
+                if (activeIdx === idx) {
+                    window._activeTemplateIndex = 0;
+                } else if (activeIdx > idx) {
+                    window._activeTemplateIndex = activeIdx - 1;
+                }
+            }
             templates.splice(idx, 1);
             sel.remove(idx);
-            sel.value = 0;
-            renderTemplateFields(templates, 0);
+            var newActive = window._activeTemplateIndex;
+            sel.value = newActive >= templates.length ? 0 : newActive;
+            renderTemplateFields(templates, parseInt(sel.value));
             window._templates = templates;
-            showToast('模板已删除');
+            // 立即保存到服务端，防止关闭设置后复活
+            var body = {templates: templates, config: {extraction: {active_template_index: window._activeTemplateIndex}}};
+            fetch('/api/save_settings', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+            .then(function(r){return r.json();})
+            .then(function(d){
+                if (d.error) { showToast('删除后保存失败: ' + d.error, true); return; }
+                showToast('模板已删除并保存');
+            }).catch(function(e){ showToast('删除后保存失败', true); });
         });
 
         document.getElementById('templateApplyBtn').addEventListener('click', function(){

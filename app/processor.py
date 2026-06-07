@@ -204,18 +204,57 @@ def _clean_numeric_field(val, is_tax_rate=False):
 
 NUMERIC_KEYS = {"价税合计", "数量", "单价", "金额", "税率/征收率", "税额"}
 
+def _extract_all_json_objects(text):
+    """从文本中逐个提取所有合法JSON对象，跳过中间的非JSON内容。"""
+    results = []
+    decoder = json.JSONDecoder()
+    idx = 0
+    text_len = len(text)
+    while idx < text_len:
+        brace_idx = text.find('{', idx)
+        if brace_idx == -1:
+            break
+        try:
+            obj, end_idx = decoder.raw_decode(text, brace_idx)
+            if isinstance(obj, dict):
+                results.append(obj)
+            idx = brace_idx + end_idx
+        except json.JSONDecodeError:
+            idx = brace_idx + 1
+    return results
+
+def _score_json_object(obj, all_field_keys):
+    """按模板字段匹配度打分：非空字段越多分数越高。"""
+    score = 0
+    for key in all_field_keys:
+        val = obj.get(key)
+        if val is not None and val != "" and (not isinstance(val, list) or len(val) > 0):
+            score += 1
+    return score
+
 def parse_extraction_result(raw_json_str, template):
     json_str = _extract_between_markers(raw_json_str)
     json_str = json_str.strip()
     if json_str.startswith("```"):
         json_str = json_str.split("\n", 1)[-1]
         json_str = json_str.rsplit("```", 1)[0]
-    json_str = re.sub(r'^[^{]*', '', json_str)
-    json_str = re.sub(r'[^}]*$', '', json_str)
-    try:
-        data = json.loads(json_str)
-    except:
-        data = {"item_count": 0, "items": []}
+
+    all_field_keys = []
+    if template:
+        for f in template.get("fields", []):
+            all_field_keys.append(f["label"])
+
+    candidates = _extract_all_json_objects(json_str)
+    if candidates:
+        best = max(candidates, key=lambda obj: _score_json_object(obj, all_field_keys))
+        data = best
+    else:
+        try:
+            json_str = re.sub(r'^[^{]*', '', json_str)
+            json_str = re.sub(r'[^}]*$', '', json_str)
+            data = json.loads(json_str)
+        except:
+            data = {"item_count": 0, "items": []}
     header_keys = [f["label"] for f in (template or {}).get("fields", []) if f.get("section") == "header"]
     item_keys = [f["label"] for f in (template or {}).get("fields", []) if f.get("section") == "item"]
     tpl_name = (template or {}).get("name", "")
@@ -428,6 +467,15 @@ def process_file_extraction(filepath, original_name, queue_id=None, group_id=Non
             prompt = build_extraction_prompt(template)
             raw_result = call_lm_studio(text, prompt)
         send_sse("log", {"level": "info", "message": f"[{original_name}] 模型返回，正在解析..."})
+        # 前置处理：多JSON对象取模板字段匹配度最高的
+        if raw_result:
+            all_jsons = _extract_all_json_objects(raw_result)
+            if len(all_jsons) > 1:
+                field_keys = [f["label"] for f in (template or {}).get("fields", [])]
+                best = max(all_jsons, key=lambda o: sum(1 for k in field_keys if o.get(k) not in (None, "", [], {})))
+                best["items"] = best.get("items") or []
+                best["item_count"] = len(best.get("items", []))
+                raw_result = json.dumps(best, ensure_ascii=False)
         parsed = parse_extraction_result(raw_result, template)
         validation = _run_invoice_validation(template, parsed)
         auto = get_config_snapshot().get("extraction", {}).get("auto_merge", False)

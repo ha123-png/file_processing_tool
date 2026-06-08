@@ -121,15 +121,15 @@ def build_extraction_prompt(template):
     if header_fields:
         hf_parts = []
         for f in header_fields:
-            hf_parts.append(f'"{f["label"]}"')
+            hf_parts.append(f'"{f["label"]}"（key名包含括号内容）' if '（' in f["label"] else f'"{f["label"]}"')
         parts.append("抬头字段：" + "、".join(hf_parts))
     if item_fields:
         it_parts = []
         for f in item_fields:
-            it_parts.append(f'"{f["label"]}"')
+            it_parts.append(f'"{f["label"]}"（key名包含括号内容）' if '（' in f["label"] else f'"{f["label"]}"')
         parts.append("明细字段：每个item对象包含 " + "、".join(it_parts))
     if item_fields:
-        parts.append("输出JSON：抬头字段名直接使用上面的中文名称作为JSON的key，明细放入items数组中。找不到的字段值设为null。")
+        parts.append("输出JSON：抬头字段名和明细字段名必须使用上面给出的完整名称作为JSON的key（包括括号），明细放入名为\"items\"的数组中。找不到的字段值设为null。")
         parts.append(f'示例格式：{{"{header_fields[0]["label"]}":"示例值","items":[{{}}, ...]}}')
     else:
         # 纯抬头字段模板（OCR降级）：LLM倾向于自己发明字段名，需要明确指令
@@ -265,6 +265,12 @@ def parse_extraction_result(raw_json_str, template):
         else:
             header[k] = ""
     items = data.get("items", [])
+    if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
+        # 兜底：LLM有时不用"items"当key，扫描其他值为list[dict]的key
+        for k, v in data.items():
+            if k != "items" and isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
+                items = v
+                break
     if not isinstance(items, list):
         items = []
     deduped = deduplicate_items(items, item_keys)

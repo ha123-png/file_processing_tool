@@ -31,78 +31,15 @@ def supports_multimodal():
     return _get_llm_cfg().get("multimodal", True)
 
 def _stream_llm(url, payload, timeout, api_key=""):
-    """流式调用 LLM API，iter_content + 手动缓冲避免 Windows 下 iter_lines 的编码问题"""
+    """非流式调用 LLM API"""
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=timeout)
+    resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
     resp.raise_for_status()
-
-    resp_ref = [resp]
-    def _watchdog():
-        while not _is_aborted():
-            abort_event.wait(0.5)
-        try:
-            resp_ref[0].close()
-        except Exception:
-            pass
-    watcher = threading.Thread(target=_watchdog, daemon=True)
-    watcher.start()
-
-    full_content = ""
-    last_chunk = ""
-    repeat_count = 0
-    buf = b""
-    try:
-        for chunk_bytes in resp.iter_content(chunk_size=None):
-            if _is_aborted():
-                resp.close()
-                raise RuntimeError("任务已被用户终止")
-            if not chunk_bytes:
-                continue
-            buf += chunk_bytes
-            while b"\n" in buf:
-                line_bytes, buf = buf.split(b"\n", 1)
-                line = line_bytes.decode("utf-8")
-                if not line:
-                    continue
-                if line.startswith("data: "):
-                    data_str = line[6:]
-                    if data_str.strip() == "[DONE]":
-                        resp.close()
-                        break
-                    try:
-                        chunk = json.loads(data_str)
-                        delta = chunk.get("choices", [{}])[0].get("delta", {})
-                        content = delta.get("content", "")
-                        if content:
-                            full_content += content
-                            if len(content) >= 3:
-                                if content == last_chunk:
-                                    repeat_count += 1
-                                    if repeat_count >= 5:
-                                        resp.close()
-                                        break
-                                else:
-                                    repeat_count = 0
-                                last_chunk = content
-                    except (json.JSONDecodeError, IndexError, KeyError):
-                        pass
-            if resp.raw.closed:
-                break
-    except Exception:
-        if _is_aborted():
-            try: resp.close()
-            except Exception: pass
-            raise RuntimeError("任务已被用户终止")
-        raise
-
-    if _is_aborted():
-        try: resp.close()
-        except Exception: pass
-        raise RuntimeError("任务已被用户终止")
-    full_content = full_content.strip()
-    return full_content
+    data = resp.json()
+    full_content = data["choices"][0]["message"]["content"]
+    return full_content.strip()
 
 def call_lm_studio(text, system_prompt):
     if _is_aborted():
@@ -117,7 +54,7 @@ def call_lm_studio(text, system_prompt):
         ],
         "temperature": llm.get("temperature", 0.3),
         "max_tokens": llm.get("max_tokens", 2048),
-        "stream": True
+        "stream": False
     }
     reasoning = llm.get("reasoning_effort")
     if reasoning and reasoning in ("low", "medium", "high"):
@@ -154,7 +91,7 @@ def call_lm_studio_multimodal_multi(image_paths, system_prompt):
         ],
         "temperature": 0.1,
         "max_tokens": llm.get("max_tokens", 4096),
-        "stream": True
+        "stream": False
     }
     if llm.get("enable_thinking") is False:
         payload["enable_thinking"] = False
@@ -188,7 +125,7 @@ def call_lm_studio_multimodal(image_path, system_prompt):
         ],
         "temperature": 0.1,
         "max_tokens": llm.get("max_tokens", 2048),
-        "stream": True
+        "stream": False
     }
     if llm.get("enable_thinking") is False:
         payload["enable_thinking"] = False

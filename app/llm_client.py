@@ -52,35 +52,44 @@ def _stream_llm(url, payload, timeout, api_key=""):
     full_content = ""
     last_chunk = ""
     repeat_count = 0
+    buf = b""
     try:
-        for raw_line in resp.iter_lines():
+        for chunk_bytes in resp.iter_content(chunk_size=None):
             if _is_aborted():
                 resp.close()
                 raise RuntimeError("任务已被用户终止")
-            if not raw_line:
+            if not chunk_bytes:
                 continue
-            line = raw_line.decode("utf-8")
-            if line.startswith("data: "):
-                data_str = line[6:]
-                if data_str.strip() == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(data_str)
-                    delta = chunk.get("choices", [{}])[0].get("delta", {})
-                    content = delta.get("content", "")
-                    if content:
-                        full_content += content
-                        if len(content) >= 3:
-                            if content == last_chunk:
-                                repeat_count += 1
-                                if repeat_count >= 5:
-                                    resp.close()
-                                    break
-                            else:
-                                repeat_count = 0
-                            last_chunk = content
-                except (json.JSONDecodeError, IndexError, KeyError):
-                    pass
+            buf += chunk_bytes
+            while b"\n" in buf:
+                line_bytes, buf = buf.split(b"\n", 1)
+                line = line_bytes.decode("utf-8")
+                if not line:
+                    continue
+                if line.startswith("data: "):
+                    data_str = line[6:]
+                    if data_str.strip() == "[DONE]":
+                        resp.close()
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            full_content += content
+                            if len(content) >= 3:
+                                if content == last_chunk:
+                                    repeat_count += 1
+                                    if repeat_count >= 5:
+                                        resp.close()
+                                        break
+                                else:
+                                    repeat_count = 0
+                                last_chunk = content
+                    except (json.JSONDecodeError, IndexError, KeyError):
+                        pass
+            if resp.raw.closed:
+                break
     except Exception:
         if _is_aborted():
             try: resp.close()

@@ -53,15 +53,14 @@ def _stream_llm(url, payload, timeout, api_key=""):
     last_chunk = ""
     repeat_count = 0
     try:
-        for line in resp.iter_lines():
+        for line in resp.iter_lines(decode_unicode=True):
             if _is_aborted():
                 resp.close()
                 raise RuntimeError("任务已被用户终止")
             if not line:
                 continue
-            decoded = line.decode("utf-8", errors="replace")
-            if decoded.startswith("data: "):
-                data_str = decoded[6:]
+            if line.startswith("data: "):
+                data_str = line[6:]
                 if data_str.strip() == "[DONE]":
                     break
                 try:
@@ -121,6 +120,40 @@ def call_lm_studio(text, system_prompt):
     reasoning = llm.get("reasoning_effort")
     if reasoning and reasoning in ("low", "medium", "high"):
         payload["reasoning_effort"] = reasoning
+    if llm.get("enable_thinking") is False:
+        payload["enable_thinking"] = False
+    return _stream_llm(url, payload, llm.get("timeout", 300), llm.get("api_key", ""))
+
+def call_lm_studio_multimodal_multi(image_paths, system_prompt):
+    """多张图片合并为一次多模态请求。image_paths: 图片路径列表"""
+    if _is_aborted():
+        raise RuntimeError("任务已被用户终止")
+    if not supports_multimodal():
+        raise RuntimeError("当前模型不支持多模态")
+    llm = _get_llm_cfg()
+    url = f"{llm['base_url'].rstrip('/')}/chat/completions"
+    user_content = []
+    for img_path in image_paths:
+        try:
+            with open(img_path, "rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode("utf-8")
+        except FileNotFoundError:
+            raise RuntimeError(f"图片文件不存在: {img_path}")
+        ext = Path(img_path).suffix.lower().lstrip(".")
+        if ext == "jpg":
+            ext = "jpeg"
+        user_content.append({"type": "image_url", "image_url": {"url": f"data:image/{ext};base64,{img_b64}"}})
+    user_content.append({"type": "text", "text": "请提取以上所有图片中的结构化信息。"})
+    payload = {
+        "model": llm.get("model", ""),
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
+        ],
+        "temperature": 0.1,
+        "max_tokens": llm.get("max_tokens", 4096),
+        "stream": True
+    }
     if llm.get("enable_thinking") is False:
         payload["enable_thinking"] = False
     return _stream_llm(url, payload, llm.get("timeout", 300), llm.get("api_key", ""))

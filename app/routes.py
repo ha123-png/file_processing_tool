@@ -1301,6 +1301,19 @@ def api_queue_batch_delete():
     from app.task_store import delete as ts_delete, get as ts_get, get_children
     from app.shared import TaskStatus
     import os as _os
+    # 安全防护：仅允许删除UPLOAD_DIR下的文件
+    _safe_root = os.path.abspath(str(shared.UPLOAD_DIR)) + os.sep
+    def _safe_unlink(fp):
+        if not fp:
+            return
+        fp_abs = os.path.abspath(fp)
+        if os.path.commonpath([fp_abs, _safe_root]) != _safe_root.rstrip(os.sep):
+            logger.warning(f"拒绝删除非上传目录文件: {fp}")
+            return
+        try:
+            _os.unlink(fp)
+        except OSError:
+            pass
     count = 0
     for tid in task_ids:
         task = ts_get(tid)
@@ -1310,27 +1323,16 @@ def api_queue_batch_delete():
             children = get_children(tid)
             if children:
                 for child in children:
-                    if child.filepath and _os.path.exists(child.filepath):
-                        try:
-                            _os.unlink(child.filepath)
-                        except OSError:
-                            pass
+                    _safe_unlink(child.filepath)
                     ts_delete(child.task_id)
                     count += 1
-            elif task.filepath and _os.path.exists(task.filepath):
-                try:
-                    _os.unlink(task.filepath)
-                except OSError:
-                    pass
+            else:
+                _safe_unlink(task.filepath)
             ts_delete(tid)
             with CANCELLED_TASK_LOCK:
                 cancelled_task_ids.discard(tid)
         else:
-            if task.filepath and _os.path.exists(task.filepath):
-                try:
-                    _os.unlink(task.filepath)
-                except OSError:
-                    pass
+            _safe_unlink(task.filepath)
             ts_delete(tid)
             with CANCELLED_TASK_LOCK:
                 cancelled_task_ids.discard(tid)

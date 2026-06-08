@@ -128,8 +128,13 @@ def build_extraction_prompt(template):
         for f in item_fields:
             it_parts.append(f'"{f["label"]}"')
         parts.append("明细字段：每个item对象包含 " + "、".join(it_parts))
-    parts.append("输出JSON：抬头字段名直接使用上面的中文名称作为JSON的key，明细放入items数组中，每个item对应一条明细。找不到的字段值设为null。")
-    parts.append('示例格式：{"购买方名称":"某某公司","纳税人识别号":"91110...","items":[{"项目名称":"货物A","数量":"1"}],"item_count":1}')
+    if item_fields:
+        parts.append("输出JSON：抬头字段名直接使用上面的中文名称作为JSON的key，明细放入items数组中。找不到的字段值设为null。")
+        parts.append(f'示例格式：{{"{header_fields[0]["label"]}":"示例值","items":[{{}}, ...]}}')
+    else:
+        # 纯抬头字段模板（OCR降级）：不要items数组
+        example = "{" + ",".join([f'"{f["label"]}":"示例值"' for f in header_fields[:3]]) + '}'
+        parts.append(f"输出JSON：仅包含上述抬头字段，不要包含items数组。找不到的字段值设为null。示例格式：{example}")
     parts.append("严格使用【内容开始】和【内容结束】包裹你的JSON输出。仅输出JSON，不要任何解释。")
     return "\n".join(parts)
 

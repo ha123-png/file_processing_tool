@@ -980,8 +980,10 @@ function displayExtractionResult(data) {
     _extractOriginalContent = originalPanel.innerHTML;
 
     var historyCount = extractionHistory.length;
+    var hasItemFields = fieldSections.indexOf('item') !== -1;
     resultMeta.innerHTML = '<span style="font-size:13px;color:var(--gray-600);">' +
-        '<strong>' + escapeHtml(data.file) + '</strong> &middot; 原文 ' + fileSize + ' 字 &middot; 提取 <strong>' + itemCount + '</strong> 条明细</span>';
+        '<strong>' + escapeHtml(data.file) + '</strong> &middot; 原文 ' + fileSize + ' 字' +
+        (hasItemFields ? ' &middot; 提取 <strong>' + itemCount + '</strong> 条明细' : '') + '</span>';
 
     var validation = data.invoice_validation || null;
     var isInvoice = false;
@@ -1020,7 +1022,9 @@ function displayExtractionResult(data) {
     }
     headerHtml += '</div></div>';
 
-    var itemHtml = '<div class="extract-items-section"><div class="extract-section-title">明细列表 (' + itemCount + ' 条)</div>';
+    var itemHtml = '';
+    if (hasItemFields) {
+    itemHtml = '<div class="extract-items-section"><div class="extract-section-title">明细列表 (' + itemCount + ' 条)</div>';
     itemHtml += '<table class="extract-item-table"><thead><tr>';
     for (var ci = 0; ci < fieldKeys.length; ci++) {
         if (fieldSections[ci] === 'item') {
@@ -1048,6 +1052,7 @@ function displayExtractionResult(data) {
     if (items.length === 0) {
         itemHtml = '<div style="text-align:center;padding:20px;color:var(--gray-400);">未识别到明细数据</div>';
     }
+    } // end if (hasItemFields)
 
     var mergeNote = autoMerged ? '<div style="padding:8px 12px;margin-bottom:8px;background:var(--success-bg);color:var(--success);border-radius:var(--radius-sm);font-size:13px;font-weight:500;">已自动合并到Excel表格，数据如下：</div>' : '';
 

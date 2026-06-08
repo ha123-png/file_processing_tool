@@ -316,16 +316,15 @@ function updateStatus(data) {
                 break;
             }
         }
-        if (hasActive) {
-            renderQueueList();
-            return;
-        }
         document.body.classList.remove('queue-paused');
         statusDot.className = 'dot';
         statusBadge.className = 'status-badge idle';
         statusBadge.textContent = '闲置中';
         togglePauseBtn.style.display = 'none';
         if (!processing) { stopProcessingTimer(); _currentTaskId = ''; }
+        if (hasActive) {
+            renderQueueList();
+        }
     }
     renderQueueList();
 }

@@ -118,23 +118,25 @@ def build_extraction_prompt(template):
     item_fields = [f for f in fields if f.get("section") == "item"]
     parts = ["你是票据提取专家，从以下文本提取结构化信息。"]
     parts.append(f"模板：{template.get('name', '')}")
+    # 核心约束：字段名不可更改
+    parts.append("【重要】以下所有字段名是JSON中必须使用的key，绝对不可修改、不可缩写、不可根据图片内容推断替换。即使你认为某个字段名与实际内容不完全匹配，也必须原样使用。")
     if header_fields:
         hf_parts = []
         for f in header_fields:
-            hf_parts.append(f'"{f["label"]}"（key名包含括号内容）' if '（' in f["label"] else f'"{f["label"]}"')
-        parts.append("抬头字段：" + "、".join(hf_parts))
+            hf_parts.append(f'"{f["label"]}"')
+        parts.append("抬头字段（必须原样作为JSON key）：" + "、".join(hf_parts))
     if item_fields:
         it_parts = []
         for f in item_fields:
-            it_parts.append(f'"{f["label"]}"（key名包含括号内容）' if '（' in f["label"] else f'"{f["label"]}"')
-        parts.append("明细字段：每个item对象包含 " + "、".join(it_parts))
+            it_parts.append(f'"{f["label"]}"')
+        parts.append("明细字段（必须原样作为JSON key）：" + "、".join(it_parts))
     if item_fields:
-        parts.append("输出JSON：抬头字段名和明细字段名必须使用上面给出的完整名称作为JSON的key（包括括号），明细放入名为\"items\"的数组中。找不到的字段值设为null。")
-        parts.append(f'示例格式：{{"{header_fields[0]["label"]}":"示例值","items":[{{}}, ...]}}')
+        parts.append("输出JSON：key必须严格使用上述字段名原样，明细放入名为\"items\"的数组中。找不到的字段值设为null。")
+        parts.append(f'示例格式：{{"{header_fields[0]["label"]}":"示例值","items":[{{}}]}}')
     else:
-        # 纯抬头字段模板（OCR降级）：LLM倾向于自己发明字段名，需要明确指令
+        # 纯抬头字段模板（OCR降级）
         field_names = "、".join([f'"{f["label"]}"' for f in header_fields])
-        parts.append(f"输出JSON：仅使用以下字段名作为key（{field_names}）。把图片中识别到的所有文字内容填入这些字段。不要自创其他字段名。找不到对应内容的字段值设为null。")
+        parts.append(f"输出JSON：key必须严格使用以下字段名原样（{field_names}）。把识别到的所有文字内容填入这些字段。绝对不要自创或修改字段名。找不到对应内容的字段值设为null。")
         example = "{" + ",".join([f'"{f["label"]}":"识别到的文字内容"' for f in header_fields[:3]]) + '}'
         parts.append(f"示例格式：{example}")
     parts.append("严格使用【内容开始】和【内容结束】包裹你的JSON输出。仅输出JSON，不要任何解释。")
@@ -266,13 +268,21 @@ def parse_extraction_result(raw_json_str, template):
             header[k] = ""
     items = data.get("items", [])
     if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
-        # 兜底：LLM有时不用"items"当key，扫描其他值为list[dict]的key
+        # 兜底1：LLM有时把数组放在其他key下（如"发票"）
         for k, v in data.items():
             if k != "items" and isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
                 items = v
                 break
     if not isinstance(items, list):
         items = []
+    # 兜底2：LLM有时把明细字段放在顶层而不是items数组里
+    if len(items) == 0 and item_keys:
+        orphan = {}
+        for k in item_keys:
+            if k in data and data[k] not in (None, "", []):
+                orphan[k] = str(data.pop(k, "")).strip()
+        if orphan:
+            items.append(orphan)
     deduped = deduplicate_items(items, item_keys)
     if is_invoice:
         for item in deduped:

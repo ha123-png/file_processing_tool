@@ -19,7 +19,7 @@ from app.shared import (
     PROMPT_FOOTER_FIRST, PROMPT_FOOTER_SECOND, get_current_mode,
     set_interrupted, TaskStatus
 )
-from app.llm_client import call_lm_studio, call_lm_studio_multimodal, supports_multimodal
+from app.llm_client import call_lm_studio, call_lm_studio_multimodal, call_lm_studio_multimodal_multi, supports_multimodal
 from app.file_handler import (
     read_text_file, read_docx_file, _docx_has_images, read_docx_with_images
 )
@@ -255,6 +255,13 @@ def parse_extraction_result(raw_json_str, template):
             data = json.loads(json_str)
         except:
             data = {"item_count": 0, "items": []}
+    # 鲁棒处理：展平嵌套 {"header":{...}} → 顶层字段
+    if isinstance(data.get("header"), dict):
+        nested = data["header"]
+        for k, v in nested.items():
+            if data.get(k) in (None, "", [], {}):
+                data[k] = v
+        del data["header"]
     header_keys = [f["label"] for f in (template or {}).get("fields", []) if f.get("section") == "header"]
     item_keys = [f["label"] for f in (template or {}).get("fields", []) if f.get("section") == "item"]
     tpl_name = (template or {}).get("name", "")
@@ -361,29 +368,58 @@ def process_file_extraction(filepath, original_name, queue_id=None, group_id=Non
         is_image = ext_lower in IMAGE_FORMATS or ext_lower in PDF_FORMATS
         if is_image:
             if ext_lower in PDF_FORMATS:
-                send_sse("log", {"level": "info", "message": f"[{original_name}] 检测为PDF，使用多模态模型逐页提取..."})
+                send_sse("log", {"level": "info", "message": f"[{original_name}] 检测为PDF，使用多模态模型提取（多页合并）..."})
                 doc = fitz.open(filepath)
                 prompt = build_extraction_prompt(template)
-                raw_results = []
                 total_pages = len(doc)
+                page_jsons = []
+                page_imgs = []
                 for page_idx in range(total_pages):
+                    page_img = None
                     try:
                         mat = fitz.Matrix(2, 2)
                         pix = doc[page_idx].get_pixmap(matrix=mat)
                         page_img = str(filepath) + f"_ext_page{page_idx}.png"
                         pix.save(page_img)
-                        raw_result = call_lm_studio_multimodal(page_img, prompt)
-                        raw_results.append(raw_result)
-                        os.remove(page_img)
+                        page_imgs.append(page_img)
+                        raw_page = call_lm_studio_multimodal(page_img, prompt)
+                        # 解析该页JSON
+                        all_jsons = _extract_all_json_objects(raw_page)
+                        if all_jsons:
+                            field_keys = [f["label"] for f in (template or {}).get("fields", [])]
+                            best = max(all_jsons, key=lambda o: sum(1 for k in field_keys if o.get(k) not in (None, "", [], {})))
+                            # 展平嵌套header
+                            if isinstance(best.get("header"), dict):
+                                for k, v in best["header"].items():
+                                    if best.get(k) in (None, "", [], {}):
+                                        best[k] = v
+                                del best["header"]
+                            page_jsons.append(best)
+                        else:
+                            page_jsons.append({"items": []})
                     except Exception as page_err:
                         send_sse("log", {"level": "warning", "message": f"[{original_name}] PDF第{page_idx+1}页提取失败: {page_err}"})
-                        try: os.remove(page_img)
-                        except OSError: pass
+                        page_jsons.append({"items": []})
                 doc.close()
-                if not raw_results:
+                # 清理临时图片
+                for pi in page_imgs:
+                    try: os.remove(pi)
+                    except OSError: pass
+                if not page_jsons:
                     raise RuntimeError(f"PDF共{total_pages}页，全部提取失败")
-                raw = "\n\n".join(raw_results) if len(raw_results) > 1 else raw_results[0]
-                raw_result = raw
+                # 智能合并：header取各页中非空值，items拼接
+                merged = {}
+                for pj in page_jsons:
+                    for k, v in pj.items():
+                        if k == "items":
+                            merged.setdefault("items", []).extend(v if isinstance(v, list) else [])
+                        elif v not in (None, "", [], {}):
+                            if k not in merged or merged[k] in (None, "", [], {}):
+                                merged[k] = v
+                if "items" not in merged:
+                    merged["items"] = []
+                raw_result = json.dumps(merged, ensure_ascii=False)
+                raw = raw_result
                 send_sse("log", {"level": "info", "message": f"[{original_name}] PDF共{total_pages}页，多模态提取完成"})
             else:
                 send_sse("log", {"level": "info", "message": f"[{original_name}] 检测为图片，使用多模态模型直接识别..."})

@@ -12,23 +12,18 @@ function openImageZoom(url) {
     if (!overlay || !img) return;
     img.src = url;
     img.onload = function() {
-        // 计算自适应缩放：刚好填满屏幕不溢出
         var vw = window.innerWidth;
         var vh = window.innerHeight;
         var iw = img.naturalWidth || img.width;
         var ih = img.naturalHeight || img.height;
         if (iw && ih) {
-            var fitScale = Math.min(vw / iw, vh / ih, 1);
-            zoomLevel = Math.round(fitScale * 100) / 100;
+            zoomLevel = Math.round(Math.min(vw / iw, vh / ih, 1) * 100) / 100;
         } else {
             zoomLevel = 1;
         }
         syncZoomTransform();
+        overlay.style.display = 'flex';
     };
-    // 立即显示（可能用上次的 zoomLevel 先渲染，onload 后自动校准）
-    zoomLevel = 1;
-    syncZoomTransform();
-    overlay.style.display = 'flex';
 }
 function closeImageZoom() {
     var overlay = document.getElementById('zoomOverlay');

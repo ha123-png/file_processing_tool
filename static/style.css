@@ -774,7 +774,6 @@ body.mode-extract:not(.tab-merge-active) #mergeWrapper {
 #zoomImage {
     transform: scale(1);
     transform-origin: center top;
-    transition: transform 0.15s ease;
     border-radius: 4px;
     max-width: none;
 }

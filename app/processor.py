@@ -132,9 +132,11 @@ def build_extraction_prompt(template):
         parts.append("输出JSON：抬头字段名直接使用上面的中文名称作为JSON的key，明细放入items数组中。找不到的字段值设为null。")
         parts.append(f'示例格式：{{"{header_fields[0]["label"]}":"示例值","items":[{{}}, ...]}}')
     else:
-        # 纯抬头字段模板（OCR降级）：不要items数组
-        example = "{" + ",".join([f'"{f["label"]}":"示例值"' for f in header_fields[:3]]) + '}'
-        parts.append(f"输出JSON：仅包含上述抬头字段，不要包含items数组。找不到的字段值设为null。示例格式：{example}")
+        # 纯抬头字段模板（OCR降级）：LLM倾向于自己发明字段名，需要明确指令
+        field_names = "、".join([f'"{f["label"]}"' for f in header_fields])
+        parts.append(f"输出JSON：仅使用以下字段名作为key（{field_names}）。把图片中识别到的所有文字内容填入这些字段。不要自创其他字段名。找不到对应内容的字段值设为null。")
+        example = "{" + ",".join([f'"{f["label"]}":"识别到的文字内容"' for f in header_fields[:3]]) + '}'
+        parts.append(f"示例格式：{example}")
     parts.append("严格使用【内容开始】和【内容结束】包裹你的JSON输出。仅输出JSON，不要任何解释。")
     return "\n".join(parts)
 

@@ -116,7 +116,7 @@ def build_extraction_prompt(template):
     fields = template.get("fields", [])
     header_fields = [f for f in fields if f.get("section") == "header"]
     item_fields = [f for f in fields if f.get("section") == "item"]
-    parts = ["你是票据提取专家，从以下文本提取结构化信息。"]
+    parts = ["你是一个智能文档理解助手。你的任务是严格根据下方模板定义的字段，从文档中提取或判断信息。模板字段即你想要的信息——不管文档是什么类型，唯一工作是按照模板输出JSON。"]
     parts.append(f"模板：{template.get('name', '')}")
     # 核心约束：字段名不可更改
     parts.append("【重要】以下所有字段名是JSON中必须使用的key，绝对不可修改、不可缩写、不可根据图片内容推断替换。即使你认为某个字段名与实际内容不完全匹配，也必须原样使用。")

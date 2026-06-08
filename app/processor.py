@@ -132,7 +132,10 @@ def build_extraction_prompt(template):
         parts.append("明细字段（必须原样作为JSON key）：" + "、".join(it_parts))
     if item_fields:
         parts.append("输出JSON：key必须严格使用上述字段名原样，明细放入名为\"items\"的数组中。找不到的字段值设为null。")
-        parts.append(f'示例格式：{{"{header_fields[0]["label"]}":"示例值","items":[{{}}]}}')
+        if header_fields:
+            parts.append(f'示例格式：{{"{header_fields[0]["label"]}":"示例值","items":[{{}}]}}')
+        else:
+            parts.append('示例格式：{"items":[{"' + item_fields[0]["label"] + '":"示例值"}]}')
     else:
         # 纯抬头字段模板（OCR降级）
         field_names = "、".join([f'"{f["label"]}"' for f in header_fields])

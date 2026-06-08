@@ -223,15 +223,6 @@ def _extract_all_json_objects(text):
             idx = brace_idx + 1
     return results
 
-def _score_json_object(obj, all_field_keys):
-    """按模板字段匹配度打分：非空字段越多分数越高。"""
-    score = 0
-    for key in all_field_keys:
-        val = obj.get(key)
-        if val is not None and val != "" and (not isinstance(val, list) or len(val) > 0):
-            score += 1
-    return score
-
 def parse_extraction_result(raw_json_str, template):
     json_str = _extract_between_markers(raw_json_str)
     json_str = json_str.strip()
@@ -239,22 +230,12 @@ def parse_extraction_result(raw_json_str, template):
         json_str = json_str.split("\n", 1)[-1]
         json_str = json_str.rsplit("```", 1)[0]
 
-    all_field_keys = []
-    if template:
-        for f in template.get("fields", []):
-            all_field_keys.append(f["label"])
-
-    candidates = _extract_all_json_objects(json_str)
-    if candidates:
-        best = max(candidates, key=lambda obj: _score_json_object(obj, all_field_keys))
-        data = best
-    else:
-        try:
-            json_str = re.sub(r'^[^{]*', '', json_str)
-            json_str = re.sub(r'[^}]*$', '', json_str)
-            data = json.loads(json_str)
-        except:
-            data = {"item_count": 0, "items": []}
+    # 优先 json.loads 直接解析，失败则用 _extract_all_json_objects 兜底取第一个 dict
+    try:
+        data = json.loads(json_str)
+    except (json.JSONDecodeError, ValueError):
+        objs = _extract_all_json_objects(json_str)
+        data = objs[0] if objs else {"item_count": 0, "items": []}
     # 鲁棒处理：展平嵌套 {"header":{...}} → 顶层字段
     if isinstance(data.get("header"), dict):
         nested = data["header"]
@@ -503,15 +484,6 @@ def process_file_extraction(filepath, original_name, queue_id=None, group_id=Non
             prompt = build_extraction_prompt(template)
             raw_result = call_lm_studio(text, prompt)
         send_sse("log", {"level": "info", "message": f"[{original_name}] 模型返回，正在解析..."})
-        # 前置处理：多JSON对象取模板字段匹配度最高的
-        if raw_result:
-            all_jsons = _extract_all_json_objects(raw_result)
-            if len(all_jsons) > 1:
-                field_keys = [f["label"] for f in (template or {}).get("fields", [])]
-                best = max(all_jsons, key=lambda o: sum(1 for k in field_keys if o.get(k) not in (None, "", [], {})))
-                best["items"] = best.get("items") or []
-                best["item_count"] = len(best.get("items", []))
-                raw_result = json.dumps(best, ensure_ascii=False)
         parsed = parse_extraction_result(raw_result, template)
         validation = _run_invoice_validation(template, parsed)
         auto = get_config_snapshot().get("extraction", {}).get("auto_merge", False)

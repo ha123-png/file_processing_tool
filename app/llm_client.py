@@ -31,6 +31,7 @@ def supports_multimodal():
     return _get_llm_cfg().get("multimodal", True)
 
 def _stream_llm(url, payload, timeout, api_key=""):
+    """流式调用 LLM API，iter_content + 手动缓冲避免 Windows 下 iter_lines 的编码问题"""
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -45,7 +46,6 @@ def _stream_llm(url, payload, timeout, api_key=""):
             resp_ref[0].close()
         except Exception:
             pass
-
     watcher = threading.Thread(target=_watchdog, daemon=True)
     watcher.start()
 
@@ -53,12 +53,13 @@ def _stream_llm(url, payload, timeout, api_key=""):
     last_chunk = ""
     repeat_count = 0
     try:
-        for line in resp.iter_lines(decode_unicode=True):
+        for raw_line in resp.iter_lines():
             if _is_aborted():
                 resp.close()
                 raise RuntimeError("任务已被用户终止")
-            if not line:
+            if not raw_line:
                 continue
+            line = raw_line.decode("utf-8")
             if line.startswith("data: "):
                 data_str = line[6:]
                 if data_str.strip() == "[DONE]":
@@ -82,24 +83,16 @@ def _stream_llm(url, payload, timeout, api_key=""):
                     pass
     except Exception:
         if _is_aborted():
-            try:
-                resp.close()
-            except Exception:
-                pass
+            try: resp.close()
+            except Exception: pass
             raise RuntimeError("任务已被用户终止")
         raise
 
     if _is_aborted():
-        try:
-            resp.close()
-        except Exception:
-            pass
+        try: resp.close()
+        except Exception: pass
         raise RuntimeError("任务已被用户终止")
     full_content = full_content.strip()
-    json_start = full_content.find('{')
-    json_end = full_content.rfind('}')
-    if json_start != -1 and json_end != -1 and json_end > json_start:
-        full_content = full_content[json_start:json_end+1]
     return full_content
 
 def call_lm_studio(text, system_prompt):
